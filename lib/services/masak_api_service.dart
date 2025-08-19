@@ -2,8 +2,16 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class MasakApiService {
-  // Base URL yang benar sesuai GitHub documentation
-  static const String baseUrl = 'https://masak-apa.tomorisakura.vercel.app';
+  // Multiple API endpoints to try (based on working unofficial Masak Apa Hari Ini APIs)
+  static const List<String> apiBaseUrls = [
+    'https://masak-apa-tomorisakura.vercel.app', // Original
+    'https://masak-apa.vercel.app', // Alternative
+    'https://api-resep-masakan.vercel.app', // Alternative
+    'https://resep-masakan-api.vercel.app', // Alternative
+  ];
+
+  // Primary base URL - will be updated if we find a working one
+  static String workingBaseUrl = 'https://masak-apa-tomorisakura.vercel.app';
 
   // Headers yang lebih lengkap
   static const Map<String, String> headers = {
@@ -12,36 +20,75 @@ class MasakApiService {
     'User-Agent': 'Flutter-App/1.0',
   };
 
-  // Test endpoint connectivity
-  static Future<bool> testConnection() async {
-    try {
-      print('Testing connection to: $baseUrl/api');
+  // Find working API endpoint
+  static Future<String?> findWorkingEndpoint() async {
+    final testEndpoints = [
+      '/api/recipes',
+      '/api/recipe/new',
+      '/recipes',
+      '/api',
+    ];
 
-      final response = await http
-          .get(Uri.parse('$baseUrl/api'), headers: headers)
-          .timeout(const Duration(seconds: 10));
+    for (String baseUrl in apiBaseUrls) {
+      for (String endpoint in testEndpoints) {
+        try {
+          final url = '$baseUrl$endpoint';
+          print('Testing endpoint: $url');
 
-      print('Connection test - Status: ${response.statusCode}');
-      print('Connection test - Body: ${response.body}');
+          final response = await http
+              .get(Uri.parse(url), headers: headers)
+              .timeout(const Duration(seconds: 5));
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return data['status'] == "On Progress 🚀";
+          if (response.statusCode == 200) {
+            final data = json.decode(response.body);
+
+            // Check if this looks like a valid recipe API response
+            bool isValidResponse = false;
+
+            if (data is Map<String, dynamic>) {
+              if (data.containsKey('results') && data['results'] is List) {
+                final results = data['results'] as List;
+                if (results.isNotEmpty && results[0] is Map) {
+                  final firstItem = results[0] as Map;
+                  if (firstItem.containsKey('title') ||
+                      firstItem.containsKey('key')) {
+                    isValidResponse = true;
+                  }
+                }
+              }
+            } else if (data is List && data.isNotEmpty) {
+              if (data[0] is Map) {
+                final firstItem = data[0] as Map;
+                if (firstItem.containsKey('title') ||
+                    firstItem.containsKey('key')) {
+                  isValidResponse = true;
+                }
+              }
+            }
+
+            if (isValidResponse) {
+              print('✅ Found working endpoint: $url');
+              workingBaseUrl = baseUrl;
+              return url;
+            }
+          }
+        } catch (e) {
+          print('❌ Endpoint failed: $baseUrl$endpoint - $e');
+        }
       }
-      return false;
-    } catch (e) {
-      print('Connection test failed: $e');
-      return false;
     }
+
+    print('⚠️ No working endpoints found, will use mock data');
+    return null;
   }
 
   // Get new recipes (endpoint: /api/recipes)
   static Future<List<dynamic>> getNewRecipes() async {
     try {
-      print('Fetching new recipes from: $baseUrl/api/recipes');
+      print('Fetching new recipes from: $workingBaseUrl/api/recipes');
 
       final response = await http
-          .get(Uri.parse('$baseUrl/api/recipes'), headers: headers)
+          .get(Uri.parse('$workingBaseUrl/api/recipes'), headers: headers)
           .timeout(const Duration(seconds: 15));
 
       print('New recipes response status: ${response.statusCode}');
@@ -51,12 +98,26 @@ class MasakApiService {
         final data = json.decode(response.body);
         print('Decoded data: $data');
 
-        if (data['method'] == 'GET' &&
-            data['status'] == true &&
-            data['results'] != null) {
-          final results = data['results'] as List<dynamic>;
-          print('Found ${results.length} new recipes');
-          return results;
+        // Handle different response formats
+        if (data is Map<String, dynamic>) {
+          if (data['method'] == 'GET' &&
+              data['status'] == true &&
+              data['results'] != null) {
+            final results = data['results'] as List<dynamic>;
+            print('Found ${results.length} new recipes');
+            return results;
+          } else if (data.containsKey('data') && data['data'] is List) {
+            final results = data['data'] as List<dynamic>;
+            print('Found ${results.length} recipes in data field');
+            return results;
+          } else if (data.containsKey('results') && data['results'] is List) {
+            final results = data['results'] as List<dynamic>;
+            print('Found ${results.length} recipes in results field');
+            return results;
+          }
+        } else if (data is List) {
+          print('Found ${data.length} recipes as direct list');
+          return data;
         }
       }
 
@@ -71,10 +132,12 @@ class MasakApiService {
   // Get new recipes by page (endpoint: /api/recipes/:page)
   static Future<List<dynamic>> getRecipesByPage(int page) async {
     try {
-      print('Fetching recipes page $page from: $baseUrl/api/recipes/$page');
+      print(
+        'Fetching recipes page $page from: $workingBaseUrl/api/recipes/$page',
+      );
 
       final response = await http
-          .get(Uri.parse('$baseUrl/api/recipes/$page'), headers: headers)
+          .get(Uri.parse('$workingBaseUrl/api/recipes/$page'), headers: headers)
           .timeout(const Duration(seconds: 15));
 
       print('Recipes page $page response status: ${response.statusCode}');
@@ -103,12 +166,12 @@ class MasakApiService {
   static Future<List<dynamic>> getLimitedRecipes(int limit) async {
     try {
       print(
-        'Fetching limited recipes: $baseUrl/api/recipes-length/?limit=$limit',
+        'Fetching limited recipes: $workingBaseUrl/api/recipes-length/?limit=$limit',
       );
 
       final response = await http
           .get(
-            Uri.parse('$baseUrl/api/recipes-length/?limit=$limit'),
+            Uri.parse('$workingBaseUrl/api/recipes-length/?limit=$limit'),
             headers: headers,
           )
           .timeout(const Duration(seconds: 15));
@@ -139,12 +202,12 @@ class MasakApiService {
   static Future<List<dynamic>> getRecipesByCategory(String categoryKey) async {
     try {
       print(
-        'Fetching recipes by category: $baseUrl/api/category/recipes/$categoryKey',
+        'Fetching recipes by category: $workingBaseUrl/api/category/recipes/$categoryKey',
       );
 
       final response = await http
           .get(
-            Uri.parse('$baseUrl/api/category/recipes/$categoryKey'),
+            Uri.parse('$workingBaseUrl/api/category/recipes/$categoryKey'),
             headers: headers,
           )
           .timeout(const Duration(seconds: 15));
@@ -174,10 +237,13 @@ class MasakApiService {
   // Get recipe categories (endpoint: /api/category/recipes)
   static Future<List<dynamic>> getRecipeCategories() async {
     try {
-      print('Fetching recipe categories: $baseUrl/api/category/recipes');
+      print('Fetching recipe categories: $workingBaseUrl/api/category/recipes');
 
       final response = await http
-          .get(Uri.parse('$baseUrl/api/category/recipes'), headers: headers)
+          .get(
+            Uri.parse('$workingBaseUrl/api/category/recipes'),
+            headers: headers,
+          )
           .timeout(const Duration(seconds: 15));
 
       print('Categories response status: ${response.statusCode}');
@@ -205,23 +271,56 @@ class MasakApiService {
   // Get recipe detail (endpoint: /api/recipe/:key)
   static Future<Map<String, dynamic>?> getRecipeDetail(String key) async {
     try {
-      print('Fetching recipe detail: $baseUrl/api/recipe/$key');
+      // Try different detail endpoints across multiple base URLs
+      final detailEndpoints = <String>[];
+      for (String url in apiBaseUrls) {
+        detailEndpoints.addAll([
+          '$url/api/recipe/$key',
+          '$url/recipe/$key',
+          '$url/api/recipes/$key',
+          '$url/recipes/$key',
+        ]);
+      }
 
-      final response = await http
-          .get(Uri.parse('$baseUrl/api/recipe/$key'), headers: headers)
-          .timeout(const Duration(seconds: 15));
+      for (String endpoint in detailEndpoints) {
+        try {
+          print('Fetching recipe detail: $endpoint');
 
-      print('Recipe detail response status: ${response.statusCode}');
-      print('Recipe detail response body: ${response.body}');
+          final response = await http
+              .get(Uri.parse(endpoint), headers: headers)
+              .timeout(const Duration(seconds: 10));
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+          print('Recipe detail response status: ${response.statusCode}');
 
-        if (data['method'] == 'GET' &&
-            data['status'] == true &&
-            data['results'] != null) {
-          print('Found recipe detail for $key');
-          return data['results'] as Map<String, dynamic>;
+          if (response.statusCode == 200) {
+            final data = json.decode(response.body);
+
+            Map<String, dynamic>? result;
+
+            if (data is Map<String, dynamic>) {
+              if (data['method'] == 'GET' &&
+                  data['status'] == true &&
+                  data['results'] != null) {
+                result = data['results'] as Map<String, dynamic>;
+              } else if (data.containsKey('results') &&
+                  data['results'] is Map) {
+                result = data['results'] as Map<String, dynamic>;
+              } else if (data.containsKey('data') && data['data'] is Map) {
+                result = data['data'] as Map<String, dynamic>;
+              } else if (data.containsKey('key') || data.containsKey('title')) {
+                // Direct recipe data
+                result = data;
+              }
+            }
+
+            if (result != null) {
+              print('Found recipe detail for $key');
+              return result;
+            }
+          }
+        } catch (e) {
+          print('Detail endpoint failed: $endpoint - $e');
+          continue;
         }
       }
 
@@ -235,29 +334,55 @@ class MasakApiService {
   // Search recipes (endpoint: /api/search/?q=parameter)
   static Future<List<dynamic>> searchRecipes(String query) async {
     try {
-      print(
-        'Searching recipes: $baseUrl/api/search/?q=${Uri.encodeComponent(query)}',
-      );
+      // Try different search endpoints across multiple base URLs
+      final searchEndpoints = <String>[];
+      for (String url in apiBaseUrls) {
+        searchEndpoints.addAll([
+          '$url/api/search/?q=${Uri.encodeComponent(query)}',
+          '$url/api/search?q=${Uri.encodeComponent(query)}',
+          '$url/search?q=${Uri.encodeComponent(query)}',
+          '$url/api/recipes/search?query=${Uri.encodeComponent(query)}',
+        ]);
+      }
 
-      final response = await http
-          .get(
-            Uri.parse('$baseUrl/api/search/?q=${Uri.encodeComponent(query)}'),
-            headers: headers,
-          )
-          .timeout(const Duration(seconds: 15));
+      for (String endpoint in searchEndpoints) {
+        try {
+          print('Searching recipes: $endpoint');
 
-      print('Search response status: ${response.statusCode}');
-      print('Search response body: ${response.body}');
+          final response = await http
+              .get(Uri.parse(endpoint), headers: headers)
+              .timeout(const Duration(seconds: 10));
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+          print('Search response status: ${response.statusCode}');
 
-        if (data['method'] == 'GET' &&
-            data['status'] == true &&
-            data['results'] != null) {
-          final results = data['results'] as List<dynamic>;
-          print('Found ${results.length} search results for "$query"');
-          return results;
+          if (response.statusCode == 200) {
+            final data = json.decode(response.body);
+
+            List<dynamic> results = [];
+
+            if (data is Map<String, dynamic>) {
+              if (data['method'] == 'GET' &&
+                  data['status'] == true &&
+                  data['results'] != null) {
+                results = data['results'] as List<dynamic>;
+              } else if (data.containsKey('results') &&
+                  data['results'] is List) {
+                results = data['results'] as List<dynamic>;
+              } else if (data.containsKey('data') && data['data'] is List) {
+                results = data['data'] as List<dynamic>;
+              }
+            } else if (data is List) {
+              results = data;
+            }
+
+            if (results.isNotEmpty) {
+              print('Found ${results.length} search results for "$query"');
+              return results;
+            }
+          }
+        } catch (e) {
+          print('Search endpoint failed: $endpoint - $e');
+          continue;
         }
       }
 
@@ -284,10 +409,15 @@ class MasakApiService {
   // Get article categories (endpoint: /api/category/article)
   static Future<List<dynamic>> getArticleCategories() async {
     try {
-      print('Fetching article categories: $baseUrl/api/category/article');
+      print(
+        'Fetching article categories: $workingBaseUrl/api/category/article',
+      );
 
       final response = await http
-          .get(Uri.parse('$baseUrl/api/category/article'), headers: headers)
+          .get(
+            Uri.parse('$workingBaseUrl/api/category/article'),
+            headers: headers,
+          )
           .timeout(const Duration(seconds: 15));
 
       print('Article categories response status: ${response.statusCode}');
@@ -316,12 +446,12 @@ class MasakApiService {
   static Future<List<dynamic>> getArticlesByCategory(String categoryKey) async {
     try {
       print(
-        'Fetching articles by category: $baseUrl/api/category/article/$categoryKey',
+        'Fetching articles by category: $workingBaseUrl/api/category/article/$categoryKey',
       );
 
       final response = await http
           .get(
-            Uri.parse('$baseUrl/api/category/article/$categoryKey'),
+            Uri.parse('$workingBaseUrl/api/category/article/$categoryKey'),
             headers: headers,
           )
           .timeout(const Duration(seconds: 15));
@@ -351,10 +481,10 @@ class MasakApiService {
   // Get new articles (endpoint: /api/articles/new)
   static Future<List<dynamic>> getNewArticles() async {
     try {
-      print('Fetching new articles: $baseUrl/api/articles/new');
+      print('Fetching new articles: $workingBaseUrl/api/articles/new');
 
       final response = await http
-          .get(Uri.parse('$baseUrl/api/articles/new'), headers: headers)
+          .get(Uri.parse('$workingBaseUrl/api/articles/new'), headers: headers)
           .timeout(const Duration(seconds: 15));
 
       print('New articles response status: ${response.statusCode}');
@@ -382,82 +512,92 @@ class MasakApiService {
   // Main method for getting all recipes (tries multiple endpoints)
   static Future<List<dynamic>> getAllRecipes({int page = 1}) async {
     try {
-      print('Loading recipes from API...');
+      print('🔍 Loading recipes from API...');
 
-      // Test API connection first
-      final isConnected = await testConnection();
-      print('API connection status: $isConnected');
+      // First, try to find a working endpoint
+      final workingEndpoint = await findWorkingEndpoint();
 
-      if (!isConnected) {
-        print('API not accessible, returning mock data');
-        return _getMockData();
-      }
+      if (workingEndpoint != null) {
+        try {
+          final response = await http
+              .get(Uri.parse(workingEndpoint), headers: headers)
+              .timeout(const Duration(seconds: 10));
 
-      // Try multiple endpoints in order of preference
-      List<dynamic> recipeData = [];
+          if (response.statusCode == 200) {
+            final data = json.decode(response.body);
+            List<dynamic> recipes = [];
 
-      // 1. Try new recipes endpoint
-      try {
-        print('Trying new recipes endpoint...');
-        recipeData = await getNewRecipes();
-        if (recipeData.isNotEmpty) {
-          print(
-            'Success: Got ${recipeData.length} recipes from new recipes endpoint',
-          );
-          return recipeData;
-        }
-      } catch (e) {
-        print('New recipes endpoint failed: $e');
-      }
+            // Handle different response formats
+            if (data is Map<String, dynamic>) {
+              if (data.containsKey('results') && data['results'] is List) {
+                recipes = data['results'] as List<dynamic>;
+              } else if (data.containsKey('data') && data['data'] is List) {
+                recipes = data['data'] as List<dynamic>;
+              } else if (data.containsKey('recipes') &&
+                  data['recipes'] is List) {
+                recipes = data['recipes'] as List<dynamic>;
+              }
+            } else if (data is List) {
+              recipes = data;
+            }
 
-      // 2. Try recipes by page endpoint
-      try {
-        print('Trying recipes by page endpoint...');
-        recipeData = await getRecipesByPage(page);
-        if (recipeData.isNotEmpty) {
-          print('Success: Got ${recipeData.length} recipes from page $page');
-          return recipeData;
-        }
-      } catch (e) {
-        print('Recipes by page endpoint failed: $e');
-      }
-
-      // 3. Try limited recipes endpoint
-      try {
-        print('Trying limited recipes endpoint...');
-        recipeData = await getLimitedRecipes(10);
-        if (recipeData.isNotEmpty) {
-          print('Success: Got ${recipeData.length} limited recipes');
-          return recipeData;
-        }
-      } catch (e) {
-        print('Limited recipes endpoint failed: $e');
-      }
-
-      // 4. Try getting recipes from first category
-      try {
-        print('Trying to get recipes from categories...');
-        final categories = await getRecipeCategories();
-        if (categories.isNotEmpty) {
-          final firstCategory = categories.first;
-          if (firstCategory['key'] != null) {
-            recipeData = await getRecipesByCategory(firstCategory['key']);
-            if (recipeData.isNotEmpty) {
+            if (recipes.isNotEmpty) {
               print(
-                'Success: Got ${recipeData.length} recipes from category ${firstCategory['key']}',
+                '✅ Success: Got ${recipes.length} recipes from working endpoint',
               );
-              return recipeData;
+              return recipes;
             }
           }
+        } catch (e) {
+          print('❌ Error using working endpoint: $e');
         }
-      } catch (e) {
-        print('Category recipes endpoint failed: $e');
       }
 
-      print('All API endpoints failed, returning mock data');
+      // Fallback: Try common endpoint patterns
+      final fallbackEndpoints = [
+        '$workingBaseUrl/api/recipes',
+        '$workingBaseUrl/api/recipes/$page',
+        '$workingBaseUrl/recipes',
+        '$workingBaseUrl/api/recipe/new',
+      ];
+
+      for (String endpoint in fallbackEndpoints) {
+        try {
+          print('🔄 Trying fallback: $endpoint');
+
+          final response = await http
+              .get(Uri.parse(endpoint), headers: headers)
+              .timeout(const Duration(seconds: 8));
+
+          if (response.statusCode == 200) {
+            final data = json.decode(response.body);
+            List<dynamic> recipes = [];
+
+            if (data is Map<String, dynamic>) {
+              if (data.containsKey('results') && data['results'] is List) {
+                recipes = data['results'] as List<dynamic>;
+              } else if (data.containsKey('data') && data['data'] is List) {
+                recipes = data['data'] as List<dynamic>;
+              }
+            } else if (data is List) {
+              recipes = data;
+            }
+
+            if (recipes.isNotEmpty) {
+              print('✅ Fallback success: Got ${recipes.length} recipes');
+              return recipes;
+            }
+          }
+        } catch (e) {
+          print('❌ Fallback failed: $endpoint - $e');
+          continue;
+        }
+      }
+
+      print('⚠️ All API endpoints failed, returning mock data');
       return _getMockData();
     } catch (e) {
-      print('Error in getAllRecipes: $e');
+      print('❌ Error in getAllRecipes: $e');
       return _getMockData();
     }
   }

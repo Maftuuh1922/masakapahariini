@@ -33,25 +33,22 @@ class AppTheme {
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
-      primarySwatch: MaterialColor(
-        primaryPurple.value,
-        <int, Color>{
-          50: const Color(0xFFF5F3FF),
-          100: const Color(0xFFEDE9FE),
-          200: const Color(0xFFDDD6FE),
-          300: const Color(0xFFC4B5FD),
-          400: const Color(0xFFA78BFA),
-          500: primaryPurple,
-          600: const Color(0xFF7C3AED),
-          700: const Color(0xFF6D28D9),
-          800: const Color(0xFF5B21B6),
-          900: const Color(0xFF4C1D95),
-        },
-      ),
+      primarySwatch: MaterialColor(primaryPurple.value, <int, Color>{
+        50: const Color(0xFFF5F3FF),
+        100: const Color(0xFFEDE9FE),
+        200: const Color(0xFFDDD6FE),
+        300: const Color(0xFFC4B5FD),
+        400: const Color(0xFFA78BFA),
+        500: primaryPurple,
+        600: const Color(0xFF7C3AED),
+        700: const Color(0xFF6D28D9),
+        800: const Color(0xFF5B21B6),
+        900: const Color(0xFF4C1D95),
+      }),
       primaryColor: primaryPurple,
       scaffoldBackgroundColor: backgroundLight,
       fontFamily: GoogleFonts.inter().fontFamily,
-      
+
       // AppBar Theme
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
@@ -66,13 +63,11 @@ class AppTheme {
       ),
 
       // Card Theme
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: cardLight,
         elevation: 2,
         shadowColor: Colors.black.withOpacity(0.1),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
 
       // Elevated Button Theme
@@ -83,10 +78,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 24,
-            vertical: 12,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         ),
       ),
     );
